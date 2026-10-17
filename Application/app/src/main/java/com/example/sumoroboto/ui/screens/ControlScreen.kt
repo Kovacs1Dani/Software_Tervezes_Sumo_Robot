@@ -1,5 +1,6 @@
 package com.example.sumoroboto.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -71,8 +72,9 @@ fun ControlScreen(
         // Mode Selector: MANUAL vs AUTO
         Card(
             modifier = Modifier.fillMaxWidth(),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                containerColor = MaterialTheme.colorScheme.surface
             ),
             shape = RoundedCornerShape(16.dp)
         ) {
@@ -124,8 +126,9 @@ fun ControlScreen(
         // Speed Limit Slider (0% - 100%)
         Card(
             modifier = Modifier.fillMaxWidth(),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                containerColor = MaterialTheme.colorScheme.surface
             ),
             shape = RoundedCornerShape(16.dp)
         ) {
@@ -205,32 +208,36 @@ fun ControlScreen(
             )
         }
 
-        // Emergency STOP Button
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Compact, lower-placed Emergency STOP Button
         Button(
             onClick = onEmergencyStop,
             modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
+                .width(220.dp)
+                .height(44.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFFD32F2F)
+                containerColor = Color(0xFFC62828)
             ),
-            shape = RoundedCornerShape(14.dp)
+            shape = RoundedCornerShape(10.dp)
         ) {
             Icon(
                 imageVector = Icons.Default.Dangerous,
                 contentDescription = "Emergency Stop",
                 tint = Color.White,
-                modifier = Modifier.size(24.dp)
+                modifier = Modifier.size(20.dp)
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = "EMERGENCY STOP",
-                fontSize = 17.sp,
-                fontWeight = FontWeight.Black,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
                 color = Color.White,
                 letterSpacing = 1.sp
             )
         }
+
+        Spacer(modifier = Modifier.height(12.dp))
     }
 }
 
@@ -254,8 +261,9 @@ fun MotorStatusCard(
 
     Card(
         modifier = modifier,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+            containerColor = MaterialTheme.colorScheme.surface
         ),
         shape = RoundedCornerShape(12.dp)
     ) {

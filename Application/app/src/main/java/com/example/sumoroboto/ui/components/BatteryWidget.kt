@@ -54,7 +54,8 @@ fun BatteryWidget(
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(8.dp))
-            .background(if (isCritical) Color(0xFF3E1A1A) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+            .background(if (isCritical) Color(0xFF3E1A1A) else MaterialTheme.colorScheme.surfaceVariant)
+            .border(1.dp, if (isCritical) Color(0xFFE53935).copy(alpha = 0.6f) else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
             .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)

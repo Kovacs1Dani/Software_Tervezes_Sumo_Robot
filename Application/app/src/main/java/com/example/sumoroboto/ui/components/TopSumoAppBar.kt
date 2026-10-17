@@ -39,6 +39,7 @@ import com.example.sumoroboto.data.model.BatteryState
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TopSumoAppBar(
+    robotName: String,
     connectionState: BluetoothConnectionState,
     batteryState: BatteryState,
     onOpenDeviceSheet: () -> Unit,
@@ -48,7 +49,7 @@ fun TopSumoAppBar(
         title = {
             Column {
                 Text(
-                    text = "Mini Sumo RC",
+                    text = robotName,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )

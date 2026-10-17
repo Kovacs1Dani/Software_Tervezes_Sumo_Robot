@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -23,10 +22,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import com.example.sumoroboto.data.bluetooth.BluetoothConnectionState
 import com.example.sumoroboto.ui.components.DeviceSelectionSheet
+import com.example.sumoroboto.ui.components.RobotNameDialog
 import com.example.sumoroboto.ui.components.TopSumoAppBar
 import com.example.sumoroboto.ui.navigation.ScreenDestination
 import com.example.sumoroboto.ui.screens.ControlScreen
 import com.example.sumoroboto.ui.screens.DohyoScreen
+import com.example.sumoroboto.ui.screens.SettingsScreen
 import com.example.sumoroboto.ui.screens.TelemetryScreen
 
 @Composable
@@ -47,6 +48,11 @@ fun MainScreen(
     val showDeviceDialog by viewModel.showDeviceDialog.collectAsState()
     val bondedDevices by viewModel.bondedDevices.collectAsState()
     val loggingState by viewModel.loggingSession.collectAsState()
+
+    val robotName by viewModel.robotName.collectAsState()
+    val themeMode by viewModel.themeMode.collectAsState()
+    val accentColor by viewModel.accentColor.collectAsState()
+    val showRobotNameDialog by viewModel.showRobotNameDialog.collectAsState()
 
     // Permissions Request Launcher
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -85,6 +91,7 @@ fun MainScreen(
         modifier = modifier.fillMaxSize(),
         topBar = {
             TopSumoAppBar(
+                robotName = robotName,
                 connectionState = connectionState,
                 batteryState = batteryState,
                 onOpenDeviceSheet = { viewModel.openDeviceDialog() },
@@ -138,7 +145,20 @@ fun MainScreen(
                 }
                 ScreenDestination.DOHYO -> {
                     DohyoScreen(
-                        telemetry = telemetry
+                        telemetry = telemetry,
+                        robotName = robotName
+                    )
+                }
+                ScreenDestination.SETTINGS -> {
+                    SettingsScreen(
+                        currentThemeMode = themeMode,
+                        currentAccentColor = accentColor,
+                        robotName = robotName,
+                        connectionState = connectionState,
+                        onThemeModeChange = { viewModel.setThemeMode(it) },
+                        onAccentColorChange = { viewModel.setAccentColor(it) },
+                        onEditRobotName = { viewModel.openRobotNameDialog() },
+                        onDisconnectAndReturn = { viewModel.disconnectAndReturnToConnection() }
                     )
                 }
             }
@@ -153,6 +173,14 @@ fun MainScreen(
             onDeviceSelected = { device -> viewModel.connectDevice(device) },
             onRefresh = { viewModel.refreshDevices() },
             onDisconnect = { viewModel.disconnectDevice() }
+        )
+
+        // Robot Naming Dialog
+        RobotNameDialog(
+            isOpen = showRobotNameDialog,
+            initialName = robotName,
+            onSaveName = { viewModel.setRobotName(it) },
+            onDismiss = { viewModel.closeRobotNameDialog() }
         )
     }
 }

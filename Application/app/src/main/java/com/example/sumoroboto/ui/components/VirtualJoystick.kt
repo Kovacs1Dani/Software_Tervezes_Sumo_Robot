@@ -39,7 +39,7 @@ fun VirtualJoystick(
 
     val baseColor = MaterialTheme.colorScheme.surfaceVariant
     val primaryColor = MaterialTheme.colorScheme.primary
-    val outlineColor = MaterialTheme.colorScheme.outlineVariant
+    val outlineColor = MaterialTheme.colorScheme.outline
 
     Box(
         modifier = modifier.size(size),

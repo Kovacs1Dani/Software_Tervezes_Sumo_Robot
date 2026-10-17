@@ -1,5 +1,6 @@
 package com.example.sumoroboto.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -101,6 +102,7 @@ fun DeviceSelectionSheet(
             if (currentState is BluetoothConnectionState.Connected) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
                     ),
@@ -198,68 +200,62 @@ fun DeviceItem(
     isSelected: Boolean,
     onSelect: () -> Unit
 ) {
+    val isVirtual = device.isVirtual
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .clickable { onSelect() },
+        border = BorderStroke(
+            1.dp,
+            if (isSelected) MaterialTheme.colorScheme.primary
+            else if (isVirtual) MaterialTheme.colorScheme.tertiary.copy(alpha = 0.5f)
+            else MaterialTheme.colorScheme.outlineVariant
+        ),
         colors = CardDefaults.cardColors(
             containerColor = if (isSelected)
                 MaterialTheme.colorScheme.primaryContainer
-            else if (device.isVirtual)
-                MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.4f)
+            else if (isVirtual)
+                MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.35f)
             else
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                MaterialTheme.colorScheme.surfaceVariant
         )
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
+                .padding(horizontal = 14.dp, vertical = if (isVirtual) 10.dp else 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(if (isVirtual) 34.dp else 40.dp)
                     .clip(CircleShape)
                     .background(
-                        if (device.isVirtual) MaterialTheme.colorScheme.tertiary.copy(alpha = 0.2f)
+                        if (isVirtual) MaterialTheme.colorScheme.tertiary.copy(alpha = 0.2f)
                         else MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
                     ),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = if (device.isVirtual) Icons.Default.SmartToy else Icons.Default.Bluetooth,
+                    imageVector = if (isVirtual) Icons.Default.SmartToy else Icons.Default.Bluetooth,
                     contentDescription = null,
-                    tint = if (device.isVirtual) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
+                    modifier = Modifier.size(if (isVirtual) 18.dp else 22.dp),
+                    tint = if (isVirtual) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
                 )
             }
 
             Spacer(modifier = Modifier.width(12.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = device.name,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 15.sp
-                    )
-                    if (device.isVirtual) {
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "DEMO",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.tertiary,
-                            modifier = Modifier
-                                .background(MaterialTheme.colorScheme.tertiaryContainer, RoundedCornerShape(4.dp))
-                                .padding(horizontal = 4.dp, vertical = 1.dp)
-                        )
-                    }
-                }
+                Text(
+                    text = device.name,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = if (isVirtual) 14.sp else 15.sp
+                )
                 Text(
                     text = device.address,
-                    fontSize = 12.sp,
+                    fontSize = if (isVirtual) 11.sp else 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }

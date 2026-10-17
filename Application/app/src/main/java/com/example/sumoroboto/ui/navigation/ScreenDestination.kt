@@ -4,6 +4,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.Gamepad
 import androidx.compose.material.icons.filled.Radar
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.ui.graphics.vector.ImageVector
 
 enum class ScreenDestination(
@@ -12,5 +13,6 @@ enum class ScreenDestination(
 ) {
     CONTROL("Control", Icons.Default.Gamepad),
     TELEMETRY("Telemetry", Icons.Default.Analytics),
-    DOHYO("Dohyo Map", Icons.Default.Radar)
+    DOHYO("Dohyo Map", Icons.Default.Radar),
+    SETTINGS("Settings", Icons.Default.Settings)
 }

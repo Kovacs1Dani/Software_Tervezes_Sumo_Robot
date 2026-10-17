@@ -1,6 +1,7 @@
 package com.example.sumoroboto.ui.screens
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -47,6 +48,7 @@ import kotlin.math.sin
 @Composable
 fun DohyoScreen(
     telemetry: TelemetryData,
+    robotName: String = "Mini Sumo",
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -64,7 +66,7 @@ fun DohyoScreen(
         ) {
             Column {
                 Text(
-                    text = "Dohyo Ring Radar",
+                    text = "$robotName Arena Radar",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
@@ -119,8 +121,9 @@ fun DohyoScreen(
         // Live Sensors Legend Card
         Card(
             modifier = Modifier.fillMaxWidth(),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                containerColor = MaterialTheme.colorScheme.surface
             ),
             shape = RoundedCornerShape(14.dp)
         ) {

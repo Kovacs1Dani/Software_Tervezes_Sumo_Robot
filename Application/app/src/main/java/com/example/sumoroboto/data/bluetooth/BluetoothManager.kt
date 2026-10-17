@@ -4,7 +4,10 @@ import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothSocket
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.Build
 import com.example.sumoroboto.data.model.RobotMode
 import com.example.sumoroboto.data.model.TelemetryData
@@ -48,6 +51,12 @@ class BluetoothManager(
     private val _telemetryFlow = MutableSharedFlow<TelemetryData>(replay = 1)
     val telemetryFlow: SharedFlow<TelemetryData> = _telemetryFlow.asSharedFlow()
 
+    private val _discoveredDevices = MutableStateFlow<List<BluetoothDeviceModel>>(emptyList())
+    val discoveredDevices: StateFlow<List<BluetoothDeviceModel>> = _discoveredDevices.asStateFlow()
+
+    private val _isScanning = MutableStateFlow(false)
+    val isScanning: StateFlow<Boolean> = _isScanning.asStateFlow()
+
     private var currentSocket: BluetoothSocket? = null
     private var outputStream: OutputStream? = null
     private var readJob: Job? = null
@@ -67,8 +76,76 @@ class BluetoothManager(
     @Volatile
     private var isSimulated: Boolean = false
 
+    private var isReceiverRegistered = false
+
+    private val discoveryReceiver = object : BroadcastReceiver() {
+        @SuppressLint("MissingPermission")
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                BluetoothDevice.ACTION_FOUND -> {
+                    val device: BluetoothDevice? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                    }
+
+                    if (device != null) {
+                        val name = try {
+                            device.name ?: "Unknown Device"
+                        } catch (_: SecurityException) {
+                            "Unknown Device"
+                        }
+                        val address = device.address ?: return
+                        val isBonded = try {
+                            device.bondState == BluetoothDevice.BOND_BONDED
+                        } catch (_: SecurityException) {
+                            false
+                        }
+
+                        val newModel = BluetoothDeviceModel(
+                            name = name,
+                            address = address,
+                            isBonded = isBonded,
+                            isVirtual = false
+                        )
+
+                        val current = _discoveredDevices.value.toMutableList()
+                        if (current.none { it.address == address }) {
+                            current.add(newModel)
+                            _discoveredDevices.value = current
+                        }
+                    }
+                }
+                BluetoothAdapter.ACTION_DISCOVERY_STARTED -> {
+                    _isScanning.value = true
+                }
+                BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> {
+                    _isScanning.value = false
+                }
+            }
+        }
+    }
+
     init {
         startMotorTicker()
+        registerReceiver()
+    }
+
+    private fun registerReceiver() {
+        if (!isReceiverRegistered) {
+            val filter = IntentFilter().apply {
+                addAction(BluetoothDevice.ACTION_FOUND)
+                addAction(BluetoothAdapter.ACTION_DISCOVERY_STARTED)
+                addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
+            }
+            context.registerReceiver(discoveryReceiver, filter)
+            isReceiverRegistered = true
+        }
+    }
+
+    fun isBluetoothEnabled(): Boolean {
+        return bluetoothAdapter?.isEnabled == true
     }
 
     /**
@@ -92,7 +169,7 @@ class BluetoothManager(
             bluetoothAdapter?.bondedDevices?.forEach { device ->
                 list.add(
                     BluetoothDeviceModel(
-                        name = device.name ?: "Unknown Device",
+                        name = device.name ?: "Sumo Robot (${device.address.takeLast(5)})",
                         address = device.address,
                         isBonded = true,
                         isVirtual = false
@@ -104,6 +181,31 @@ class BluetoothManager(
         }
 
         return list
+    }
+
+    @SuppressLint("MissingPermission")
+    fun startDiscovery() {
+        val adapter = bluetoothAdapter ?: return
+        try {
+            if (adapter.isDiscovering) {
+                adapter.cancelDiscovery()
+            }
+            _discoveredDevices.value = emptyList()
+            val started = adapter.startDiscovery()
+            _isScanning.value = started
+        } catch (_: SecurityException) {
+            _isScanning.value = false
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    fun cancelDiscovery() {
+        try {
+            if (bluetoothAdapter?.isDiscovering == true) {
+                bluetoothAdapter.cancelDiscovery()
+            }
+        } catch (_: SecurityException) {}
+        _isScanning.value = false
     }
 
     /**
@@ -160,7 +262,8 @@ class BluetoothManager(
         }
     }
 
-    private fun connectVirtual() {
+    fun connectVirtual() {
+        disconnect()
         isSimulated = true
         _connectionState.value = BluetoothConnectionState.Connected(
             deviceName = VIRTUAL_DEVICE_NAME,
@@ -345,5 +448,16 @@ class BluetoothManager(
         currentSocket = null
 
         _connectionState.value = BluetoothConnectionState.Disconnected
+    }
+
+    fun cleanup() {
+        disconnect()
+        tickerJob?.cancel()
+        if (isReceiverRegistered) {
+            try {
+                context.unregisterReceiver(discoveryReceiver)
+            } catch (_: Exception) {}
+            isReceiverRegistered = false
+        }
     }
 }

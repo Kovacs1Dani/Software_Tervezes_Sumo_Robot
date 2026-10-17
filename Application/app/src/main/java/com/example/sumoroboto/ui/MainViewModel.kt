@@ -11,22 +11,48 @@ import com.example.sumoroboto.data.logging.TelemetryCsvLogger
 import com.example.sumoroboto.data.model.BatteryState
 import com.example.sumoroboto.data.model.RobotMode
 import com.example.sumoroboto.data.model.TelemetryData
+import com.example.sumoroboto.data.settings.AppAccentColor
+import com.example.sumoroboto.data.settings.AppSettingsManager
+import com.example.sumoroboto.data.settings.AppThemeMode
+import com.example.sumoroboto.ui.navigation.AppFlowState
 import com.example.sumoroboto.ui.navigation.ScreenDestination
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
+    val settingsManager = AppSettingsManager(application.applicationContext)
     val bluetoothManager = BluetoothManager(application.applicationContext, viewModelScope)
     val csvLogger = TelemetryCsvLogger(application.applicationContext)
 
-    val connectionState: StateFlow<BluetoothConnectionState> = bluetoothManager.connectionState
+    // App Navigation Flow: SPLASH -> CONNECTION -> MAIN
+    private val _appFlowState = MutableStateFlow(AppFlowState.SPLASH)
+    val appFlowState: StateFlow<AppFlowState> = _appFlowState.asStateFlow()
 
+    // Settings & Customization
+    val themeMode: StateFlow<AppThemeMode> = settingsManager.themeMode
+    val accentColor: StateFlow<AppAccentColor> = settingsManager.accentColor
+    val robotName: StateFlow<String> = settingsManager.robotName
+
+    // First Connection Robot Naming Dialog
+    private val _showRobotNameDialog = MutableStateFlow(false)
+    val showRobotNameDialog: StateFlow<Boolean> = _showRobotNameDialog.asStateFlow()
+
+    // Bluetooth states
+    val connectionState: StateFlow<BluetoothConnectionState> = bluetoothManager.connectionState
+    val discoveredDevices: StateFlow<List<BluetoothDeviceModel>> = bluetoothManager.discoveredDevices
+    val isScanning: StateFlow<Boolean> = bluetoothManager.isScanning
+
+    private val _bondedDevices = MutableStateFlow<List<BluetoothDeviceModel>>(emptyList())
+    val bondedDevices: StateFlow<List<BluetoothDeviceModel>> = _bondedDevices.asStateFlow()
+
+    private val _showDeviceDialog = MutableStateFlow(false)
+    val showDeviceDialog: StateFlow<Boolean> = _showDeviceDialog.asStateFlow()
+
+    // Telemetry and Logging
     private val _telemetry = MutableStateFlow(TelemetryData())
     val telemetry: StateFlow<TelemetryData> = _telemetry.asStateFlow()
 
@@ -54,12 +80,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _currentDestination = MutableStateFlow(ScreenDestination.CONTROL)
     val currentDestination: StateFlow<ScreenDestination> = _currentDestination.asStateFlow()
 
-    private val _showDeviceDialog = MutableStateFlow(false)
-    val showDeviceDialog: StateFlow<Boolean> = _showDeviceDialog.asStateFlow()
-
-    private val _bondedDevices = MutableStateFlow<List<BluetoothDeviceModel>>(emptyList())
-    val bondedDevices: StateFlow<List<BluetoothDeviceModel>> = _bondedDevices.asStateFlow()
-
     val loggingSession: StateFlow<LoggingSessionState> = csvLogger.sessionState
 
     init {
@@ -72,11 +92,72 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
+        // Monitor connection state to automatically trigger robot naming and flow transition
+        viewModelScope.launch {
+            bluetoothManager.connectionState.collect { state ->
+                if (state is BluetoothConnectionState.Connected) {
+                    if (_appFlowState.value == AppFlowState.CONNECTION) {
+                        _appFlowState.value = AppFlowState.MAIN
+                    }
+                    if (!settingsManager.hasNamedRobot.value) {
+                        _showRobotNameDialog.value = true
+                    }
+                }
+            }
+        }
+
         refreshDevices()
+    }
+
+    fun setAppFlowState(state: AppFlowState) {
+        _appFlowState.value = state
+    }
+
+    fun setThemeMode(mode: AppThemeMode) {
+        settingsManager.setThemeMode(mode)
+    }
+
+    fun setAccentColor(color: AppAccentColor) {
+        settingsManager.setAccentColor(color)
+    }
+
+    fun setRobotName(name: String) {
+        settingsManager.setRobotName(name)
+        _showRobotNameDialog.value = false
+    }
+
+    fun openRobotNameDialog() {
+        _showRobotNameDialog.value = true
+    }
+
+    fun closeRobotNameDialog() {
+        _showRobotNameDialog.value = false
     }
 
     fun refreshDevices() {
         _bondedDevices.value = bluetoothManager.getBondedDevices()
+    }
+
+    fun startBluetoothScan() {
+        bluetoothManager.startDiscovery()
+    }
+
+    fun stopBluetoothScan() {
+        bluetoothManager.cancelDiscovery()
+    }
+
+    fun enterSidedoor() {
+        // Connect in demo/simulator mode to allow full UI exploration without hardware
+        bluetoothManager.connectVirtual()
+        _appFlowState.value = AppFlowState.MAIN
+        if (!settingsManager.hasNamedRobot.value) {
+            _showRobotNameDialog.value = true
+        }
+    }
+
+    fun disconnectAndReturnToConnection() {
+        bluetoothManager.disconnect()
+        _appFlowState.value = AppFlowState.CONNECTION
     }
 
     fun openDeviceDialog() {
@@ -116,11 +197,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         setRobotMode(next)
     }
 
-    /**
-     * Called by Joystick component on drag.
-     * x: -1.0 (left) to 1.0 (right)
-     * y: -1.0 (reverse) to 1.0 (forward)
-     */
     fun onJoystickMove(x: Float, y: Float) {
         _joystickX.value = x
         _joystickY.value = y
@@ -137,19 +213,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun recomputeMotorPwm(x: Float, y: Float) {
         val maxPwm = (255 * _speedLimit.value).roundToInt()
-
-        // Differential steering calculation:
-        // y > 0 is forward, y < 0 is reverse
-        // x > 0 is right turn (left wheel faster, right wheel slower)
-        // x < 0 is left turn (right wheel faster, left wheel slower)
         val left = ((y + x) * maxPwm).roundToInt().coerceIn(-255, 255)
         val right = ((y - x) * maxPwm).roundToInt().coerceIn(-255, 255)
 
         _currentPwmL.value = left
         _currentPwmR.value = right
 
-        // Update target in BluetoothManager without flooding socket;
-        // ticker loop will sample this at 40 Hz
         bluetoothManager.updateTargetMotorSpeed(left, right)
     }
 
@@ -176,6 +245,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     override fun onCleared() {
         super.onCleared()
         csvLogger.stopLogging()
-        bluetoothManager.disconnect()
+        bluetoothManager.cleanup()
     }
 }

@@ -1,21 +1,20 @@
 package com.example.sumoroboto.ui.theme
 
-import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.luminance
+import com.example.sumoroboto.data.settings.AppAccentColor
+import com.example.sumoroboto.data.settings.AppThemeMode
 
-private val DarkColorScheme = darkColorScheme(
-    primary = TechCyan,
-    onPrimary = Color.Black,
-    primaryContainer = Color(0xFF004D5A),
-    onPrimaryContainer = Color(0xFFE0F7FA),
+private fun createDarkColorScheme(accentColor: AppAccentColor) = darkColorScheme(
+    primary = accentColor.primaryColor,
+    onPrimary = if (accentColor.primaryColor.luminance() > 0.5f) Color.Black else Color.White,
+    primaryContainer = accentColor.primaryColor.copy(alpha = 0.25f),
+    onPrimaryContainer = Color.White,
     secondary = SumoOrange,
     onSecondary = Color.Black,
     secondaryContainer = Color(0xFF5D3600),
@@ -26,34 +25,47 @@ private val DarkColorScheme = darkColorScheme(
     surfaceVariant = DarkSurfaceVariant,
     onBackground = Color(0xFFE0E0E0),
     onSurface = Color(0xFFE0E0E0),
+    onSurfaceVariant = Color(0xFFA0AAB5),
+    outline = Color(0xFF455A64),
+    outlineVariant = Color(0xFF2C3440),
     error = SumoRed
 )
 
-private val LightColorScheme = lightColorScheme(
-    primary = Color(0xFF006877),
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFFA1EFFF),
-    secondary = Color(0xFF8B5000),
-    tertiary = Color(0xFF005AC1),
-    background = Color(0xFFF9F9FB),
+private fun createLightColorScheme(accentColor: AppAccentColor) = lightColorScheme(
+    primary = accentColor.primaryColor,
+    onPrimary = if (accentColor.primaryColor.luminance() > 0.5f) Color.Black else Color.White,
+    primaryContainer = accentColor.primaryColor.copy(alpha = 0.15f),
+    onPrimaryContainer = Color(0xFF0F172A),
+    secondary = Color(0xFFD97706),
+    onSecondary = Color.White,
+    tertiary = Color(0xFF2563EB),
+    background = Color(0xFFF8FAFC),
     surface = Color.White,
-    surfaceVariant = Color(0xFFE8ECEF),
+    surfaceVariant = Color(0xFFE2E8F0),
+    onBackground = Color(0xFF0F172A),
+    onSurface = Color(0xFF0F172A),
+    onSurfaceVariant = Color(0xFF475569),
+    outline = Color(0xFF64748B),
+    outlineVariant = Color(0xFF94A3B8),
     error = SumoRed
 )
 
 @Composable
 fun SumoRobotoTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = false, // Robotics dark theme preferred
+    themeMode: AppThemeMode = AppThemeMode.DARK,
+    accentColor: AppAccentColor = AppAccentColor.CYAN,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
+    val isDark = when (themeMode) {
+        AppThemeMode.DARK -> true
+        AppThemeMode.LIGHT -> false
+        AppThemeMode.AUTO -> isSystemInDarkTheme()
+    }
+
+    val colorScheme = if (isDark) {
+        createDarkColorScheme(accentColor)
+    } else {
+        createLightColorScheme(accentColor)
     }
 
     MaterialTheme(
