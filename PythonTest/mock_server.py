@@ -4,6 +4,7 @@ import threading
 import time
 import csv
 import os
+import random
 from datetime import datetime
 
 app = Flask(__name__)
@@ -13,25 +14,49 @@ class RobotSimulator:
     def __init__(self):
         self.battery = 8.4
         self.mode = "MANUAL"
-        # Vonalérzékelő teljesen eltávolítva a szenzorok közül
-        self.sensors = {"s1_front": 80, "s2_left": 100, "s3_right": 100}
+        # Visszahoztuk a vonalérzékelőt a szumó logikához
+        self.sensors = {"s1_front": 80, "line": "Fekete"}
         self.motors = {"pwm_a": 0, "pwm_b": 0, "direction": "STOP"}
-        self.log_messages = ["Rendszer elindítva, vonalérzékelő kikapcsolva."]
+        self.log_messages = ["Rendszer elindítva, szumó szimuláció aktív."]
 
     def update_state(self):
+        # 1. Akku merülése
         drain_rate = 0.005 if self.motors["direction"] == "STOP" else 0.015
         if self.battery > 6.0:
             self.battery -= drain_rate
 
-        if self.motors["direction"] == "FORWARD" and self.sensors["s1_front"] > 5:
-            self.sensors["s1_front"] -= 2
-            if self.sensors["s1_front"] <= 15:
-                self.log_messages.append("Figyelem: Akadály a közelben!")
-        elif self.motors["direction"] == "REVERSE" and self.sensors["s1_front"] < 100:
-            self.sensors["s1_front"] += 2
+        # Alapértelmezett állapot: bent vagyunk a fekete pálya közepén
+        current_line = "Fekete"
+
+        # 2. Szumó Mozgás Logika
+        if self.motors["direction"] == "FORWARD":
+            # Közeledünk valamihez (távolság csökken)
+            if self.sensors["s1_front"] > 5:
+                self.sensors["s1_front"] -= 5
+                
+                # Ha nagyon közel van, az valószínűleg a másik robot
+                if self.sensors["s1_front"] == 15:
+                    self.log_messages.append("Célpont befogva! Támadás!")
+
+            # Mozgás közben van rá esély, hogy elérjük a dojo szélét (fehér vonal)
+            if random.random() < 0.15: # 15% esély
+                current_line = "Fehér"
+                self.log_messages.append("VESZÉLY: Fehér vonal (Dojo széle) érzékelve!")
+
+        elif self.motors["direction"] == "REVERSE":
+            # Tolatunk, távolodunk
+            if self.sensors["s1_front"] < 100:
+                self.sensors["s1_front"] += 5
+        
+        elif self.motors["direction"] in ["LEFT", "RIGHT"]:
+            # Forgás közben a szenzor "pásztázza" a pályát, így a távolság ugrál
+            self.sensors["s1_front"] = random.randint(30, 100)
+
+        self.sensors["line"] = current_line
 
 robot = RobotSimulator()
 
+# Háttérfolyamat a CSV logoláshoz
 def simulation_loop():
     csv_file = 'telemetry_log.csv'
     file_exists = os.path.isfile(csv_file)
@@ -39,7 +64,7 @@ def simulation_loop():
     with open(csv_file, 'a', newline='') as f:
         writer = csv.writer(f)
         if not file_exists:
-            writer.writerow(['timestamp', 'battery_v', 'direction', 's1_front'])
+            writer.writerow(['timestamp', 'battery_v', 'direction', 'distance_cm', 'line_sensor'])
             
         while True:
             robot.update_state()
@@ -47,12 +72,15 @@ def simulation_loop():
                 datetime.now().isoformat(), 
                 round(robot.battery, 2), 
                 robot.motors['direction'], 
-                robot.sensors['s1_front']
+                robot.sensors['s1_front'],
+                robot.sensors['line']
             ])
             f.flush()
             time.sleep(1)
 
 threading.Thread(target=simulation_loop, daemon=True).start()
+
+# --- API VÉGPONTOK (Ez adja a szabványosított "sort" Daninak) ---
 
 @app.route('/api/status', methods=['GET'])
 def get_status():
@@ -61,7 +89,7 @@ def get_status():
     return jsonify({
         "battery": round(robot.battery, 2),
         "distance_cm": robot.sensors["s1_front"],
-        "line_sensor": "Nincs", # Így küldjük át, hogy a weboldal ne fagyjon le
+        "line_sensor": robot.sensors["line"], 
         "log_message": msg
     })
 
@@ -81,9 +109,9 @@ def receive_command():
     elif cmd == 'STOP':
         robot.motors.update({"direction": "STOP", "pwm_a": 0, "pwm_b": 0})
         
-    robot.log_messages.append(f"Parancs végrehajtva: {cmd}")
+    robot.log_messages.append(f"Parancs: {cmd}")
     return jsonify({"status": "success", "executed": cmd})
 
 if __name__ == '__main__':
-    print("Flask szerver indul a 8080-as porton...")
+    print("Szumó Mock Szerver indul a 8080-as porton...")
     app.run(port=8080, debug=False, use_reloader=False)
