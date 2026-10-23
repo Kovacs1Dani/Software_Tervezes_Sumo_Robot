@@ -1,0 +1,1383 @@
+<!DOCTYPE html>
+<html lang="hu" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mini Sumo Robot – Vezérlőpult &amp; Telemetria</title>
+    <!-- Kizárólag Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        sumo: {
+                            charcoal: '#121418',
+                            surface: '#1B1E24',
+                            variant: '#262B34',
+                            outline: '#455A64',
+                            outlineVar: '#2C3440',
+                            cyan: '#00E5FF',
+                            blue: '#2979FF',
+                            orange: '#FF9800',
+                            red: '#E53935',
+                            green: '#43A047'
+                        }
+                    }
+                }
+            }
+        };
+    </script>
+    <style>
+        :root {
+            --accent: #00E5FF;
+            --accent-rgb: 0, 229, 255;
+            --on-accent: #000000;
+        }
+        .accent-text { color: var(--accent) !important; }
+        .accent-bg { background-color: var(--accent) !important; color: var(--on-accent) !important; }
+        .accent-border { border-color: var(--accent) !important; }
+        .accent-ring:focus { --tw-ring-color: var(--accent) !important; }
+        input[type="range"] { accent-color: var(--accent); }
+    </style>
+</head>
+<body id="app-body" class="bg-[#121418] text-[#E0E0E0] font-sans min-h-screen flex flex-col selection:bg-[#00E5FF] selection:text-black">
+
+    <!-- TOP SUMO APP BAR (Pontosan a TopSumoAppBar.kt és BatteryWidget.kt alapján) -->
+    <header class="sticky top-0 z-30 bg-[#1B1E24] border-b border-[#2C3440] shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 md:px-6 h-16 flex items-center justify-between gap-4">
+            <!-- Bal oldal: Robot Név + ConnectionStatusChip -->
+            <div class="flex items-center gap-3 min-w-0">
+                <div class="w-10 h-10 rounded-full flex items-center justify-center bg-[#262B34] border border-[#2C3440] shrink-0">
+                    <svg class="w-5 h-5 accent-text" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2M7.5 13A2.5 2.5 0 0 0 5 15.5 2.5 2.5 0 0 0 7.5 18a2.5 2.5 0 0 0 2.5-2.5A2.5 2.5 0 0 0 7.5 13m9 0a2.5 2.5 0 0 0-2.5 2.5 2.5 2.5 0 0 0 2.5 2.5 2.5 2.5 0 0 0 2.5-2.5 2.5 2.5 0 0 0-2.5-2.5Z"/>
+                    </svg>
+                </div>
+                <div class="min-w-0">
+                    <div class="flex items-center gap-2">
+                        <h1 id="top-robot-name" class="text-base md:text-lg font-bold text-white truncate">Mini Sumo</h1>
+                        <span class="hidden sm:inline-block text-[11px] font-mono px-2 py-0.5 rounded bg-[#262B34] text-[#A0AAB5] border border-[#2C3440]">
+                            127.0.0.1:5000
+                        </span>
+                    </div>
+                    <!-- ConnectionStatusChip -->
+                    <div class="flex items-center gap-1.5 mt-0.5">
+                        <span id="conn-dot" class="w-2 h-2 rounded-full bg-[#E53935] animate-pulse"></span>
+                        <span id="conn-text" class="text-[11px] text-[#A0AAB5] truncate">Csatlakozás a szerverhez...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Jobb oldal: BatteryWidget.kt pontos mása + Kapcsolat ikon -->
+            <div class="flex items-center gap-3 shrink-0">
+                <div id="top-battery-widget" class="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-[#262B34] border border-[#2C3440]">
+                    <span id="top-bat-warn" class="hidden text-[#E53935] text-xs font-bold" title="Kritikus akkumulátor szint!">⚠</span>
+                    <!-- Fizikai akkumulátor ikon + pozitív saru -->
+                    <div class="flex items-center">
+                        <div id="top-bat-outline" class="w-6 h-3 border border-[#A0AAB5] rounded-[2px] p-[1px] flex items-center">
+                            <div id="top-bat-fill" class="h-full bg-[#43A047] rounded-[1px] transition-all duration-300" style="width: 100%"></div>
+                        </div>
+                        <div class="w-[2px] h-1.5 bg-[#A0AAB5] rounded-r-[1px]"></div>
+                    </div>
+                    <div class="text-right leading-tight">
+                        <div id="top-bat-pct" class="text-[11px] font-bold text-white">100%</div>
+                        <div id="top-bat-volt" class="text-[9px] font-mono text-[#A0AAB5]">8.40V</div>
+                    </div>
+                </div>
+
+                <!-- Gyors Megosztás gomb a fejlécben -->
+                <button
+                    type="button"
+                    onclick="switchTab('share')"
+                    class="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#262B34] hover:bg-[#2C3440] border border-[#2C3440] text-xs font-semibold text-white transition"
+                    title="Ugrás a Megosztás és Gmail export fülre"
+                >
+                    <span>📤</span>
+                    <span>Megosztás / CSV</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Navigációs Fülek (App NavigationBar + Megosztás fül) -->
+        <nav class="max-w-7xl mx-auto px-4 md:px-6 flex items-center gap-1 overflow-x-auto border-t border-[#2C3440]/70 bg-[#16191E]">
+            <button
+                type="button"
+                onclick="switchTab('dashboard')"
+                id="tab-btn-dashboard"
+                class="tab-btn flex items-center gap-2 px-4 py-2.5 text-xs md:text-sm font-bold border-b-2 accent-border accent-text transition whitespace-nowrap"
+            >
+                <span>🎮</span>
+                <span>Vezérlés &amp; Telemetria</span>
+            </button>
+            <button
+                type="button"
+                onclick="switchTab('share')"
+                id="tab-btn-share"
+                class="tab-btn flex items-center gap-2 px-4 py-2.5 text-xs md:text-sm font-semibold border-b-2 border-transparent text-[#A0AAB5] hover:text-white transition whitespace-nowrap"
+            >
+                <span>📧</span>
+                <span>Megosztás &amp; Gmail CSV</span>
+                <span id="nav-sample-badge" class="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-[#262B34] text-[#00E5FF]">0</span>
+            </button>
+            <button
+                type="button"
+                onclick="switchTab('dohyo')"
+                id="tab-btn-dohyo"
+                class="tab-btn flex items-center gap-2 px-4 py-2.5 text-xs md:text-sm font-semibold border-b-2 border-transparent text-[#A0AAB5] hover:text-white transition whitespace-nowrap"
+            >
+                <span>🎯</span>
+                <span>Dohyo Radar</span>
+            </button>
+            <button
+                type="button"
+                onclick="switchTab('settings')"
+                id="tab-btn-settings"
+                class="tab-btn flex items-center gap-2 px-4 py-2.5 text-xs md:text-sm font-semibold border-b-2 border-transparent text-[#A0AAB5] hover:text-white transition whitespace-nowrap"
+            >
+                <span>⚙️</span>
+                <span>Beállítások</span>
+            </button>
+        </nav>
+    </header>
+
+    <!-- FŐ TARTALOM -->
+    <main class="max-w-7xl w-full mx-auto flex-grow p-4 md:p-6">
+
+        <!-- =================================================================== -->
+        <!-- 1. FÜL: VEZÉRLÉS & TELEMETRIA (Két vizuálisan elkülönülő panel)     -->
+        <!-- =================================================================== -->
+        <div id="tab-dashboard" class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+            <!-- BAL PANEL (7 oszlop): TELEMETRIAI ADATMEGJELENÍTŐ (TelemetryScreen.kt stílusban) -->
+            <section class="lg:col-span-7 bg-[#1B1E24] border border-[#2C3440] rounded-2xl p-5 md:p-6 shadow-xl space-y-5">
+                <div class="flex items-center justify-between border-b border-[#2C3440] pb-3">
+                    <div>
+                        <h2 class="text-lg font-bold text-white">Telemetriai Adatmegjelenítő</h2>
+                        <p class="text-xs text-[#A0AAB5]">Valós idejű szenzor, akkumulátor és motor diagnosztika (500 ms)</p>
+                    </div>
+                    <span class="text-[11px] font-mono px-2.5 py-1 rounded-lg bg-[#262B34] accent-text border border-[#2C3440]">
+                        GET /api/telemetry
+                    </span>
+                </div>
+
+                <!-- Power Subsystem (2S LiPo) + Robot Állapot Kártyák -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <!-- Power Subsystem Card (TelemetryScreen.kt alapján) -->
+                    <div class="bg-[#121418] border border-[#2C3440] rounded-[14px] p-4 space-y-3">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold text-white">Power Subsystem (2S LiPo)</span>
+                            <span id="bat-status-chip" class="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-[#43A047]/20 text-[#43A047]">
+                                NOMINAL
+                            </span>
+                        </div>
+                        <div class="flex items-end justify-between">
+                            <div>
+                                <div class="text-[11px] text-[#A0AAB5]">Measured Voltage</div>
+                                <div class="text-2xl font-mono font-bold text-white">
+                                    <span id="val-bat">8.40</span> <span class="text-sm text-[#A0AAB5]">V</span>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-[11px] text-[#A0AAB5]">Estimated Remaining</div>
+                                <div id="val-bat-pct" class="text-2xl font-mono font-bold accent-text">100 %</div>
+                            </div>
+                        </div>
+                        <div class="w-full bg-[#262B34] h-2 rounded-full overflow-hidden">
+                            <div id="bar-bat" class="bg-[#43A047] h-full rounded-full transition-all duration-300" style="width: 100%"></div>
+                        </div>
+                    </div>
+
+                    <!-- Robot Állapot & Üzemmód Kártya -->
+                    <div class="bg-[#121418] border border-[#2C3440] rounded-[14px] p-4 flex flex-col justify-between">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold text-white">Robot State &amp; Mode</span>
+                            <span id="val-mode" class="text-[11px] font-mono font-bold px-2.5 py-0.5 rounded bg-[#2979FF]/20 text-[#2979FF] border border-[#2979FF]/40">
+                                MANUAL
+                            </span>
+                        </div>
+                        <div class="my-2 flex items-center justify-between">
+                            <div>
+                                <div class="text-[11px] text-[#A0AAB5]">Aktuális Mozgásállapot</div>
+                                <div id="val-state" class="text-2xl font-mono font-extrabold tracking-wider text-[#FF9800]">
+                                    STOP
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-[11px] text-[#A0AAB5]">Frissítve</div>
+                                <div id="val-updated" class="text-xs font-mono text-white">--:--:--</div>
+                            </div>
+                        </div>
+                        <div class="text-[11px] font-mono text-[#A0AAB5] border-t border-[#2C3440] pt-2 flex justify-between">
+                            <span>SQLite naplózás:</span>
+                            <span class="text-[#43A047]">telemetry.db (logs)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Distance Sensors & Line Sensor (S1, S2, S3 nyers értékek + vizuális sávok) -->
+                <div class="space-y-2.5">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-xs font-bold uppercase tracking-wider accent-text">
+                            Distance &amp; Line Edge Sensors (s1 · s2 · s3)
+                        </h3>
+                        <span class="text-[11px] font-mono text-[#A0AAB5]">Nyers szenzor értékek</span>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <!-- S1: Left Distance Sensor Card (SensorBar.kt alapján) -->
+                        <div class="bg-[#121418] border border-[#2C3440] rounded-xl p-3.5">
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="text-xs text-[#A0AAB5]">Left Distance (s1)</span>
+                                <span class="text-[10px] font-mono text-[#A0AAB5]">cm / raw</span>
+                            </div>
+                            <div class="flex items-baseline justify-between">
+                                <span id="val-s1" class="text-2xl font-mono font-bold text-white">35</span>
+                                <span id="status-s1" class="text-[10px] font-mono text-[#43A047]">CLEAR</span>
+                            </div>
+                            <div class="w-full bg-[#262B34] h-2 rounded mt-2.5 overflow-hidden">
+                                <div id="bar-s1" class="bg-[#43A047] h-full transition-all duration-300" style="width: 44%"></div>
+                            </div>
+                        </div>
+
+                        <!-- S2: Right Distance Sensor Card -->
+                        <div class="bg-[#121418] border border-[#2C3440] rounded-xl p-3.5">
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="text-xs text-[#A0AAB5]">Right Distance (s2)</span>
+                                <span class="text-[10px] font-mono text-[#A0AAB5]">cm / raw</span>
+                            </div>
+                            <div class="flex items-baseline justify-between">
+                                <span id="val-s2" class="text-2xl font-mono font-bold text-white">42</span>
+                                <span id="status-s2" class="text-[10px] font-mono text-[#43A047]">CLEAR</span>
+                            </div>
+                            <div class="w-full bg-[#262B34] h-2 rounded mt-2.5 overflow-hidden">
+                                <div id="bar-s2" class="bg-[#43A047] h-full transition-all duration-300" style="width: 52%"></div>
+                            </div>
+                        </div>
+
+                        <!-- S3: Dohyo Line Edge Sensor Card -->
+                        <div id="card-s3" class="bg-[#121418] border border-[#2C3440] rounded-xl p-3.5 flex flex-col justify-between">
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs text-[#A0AAB5]">Dohyo Line (s3)</span>
+                                <span id="dot-s3" class="w-3.5 h-3.5 rounded-full bg-[#43A047]"></span>
+                            </div>
+                            <div class="flex items-baseline justify-between my-1">
+                                <span id="val-s3" class="text-2xl font-mono font-bold text-white">0</span>
+                                <span id="label-s3" class="text-[11px] font-bold text-[#43A047]">CLEAR (BLACK)</span>
+                            </div>
+                            <div class="w-full bg-[#262B34] h-2 rounded overflow-hidden">
+                                <div id="bar-s3" class="bg-[#43A047] h-full transition-all duration-300" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Motor PWM Status Cards (ControlScreen.kt MotorStatusCard alapján) -->
+                <div class="space-y-2.5">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-xs font-bold uppercase tracking-wider accent-text">
+                            Live Motor PWM Signals (pwmA · pwmB)
+                        </h3>
+                        <span class="text-[11px] font-mono text-[#A0AAB5]">Tartomány: 0 – 255</span>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <!-- Left Motor (pwmA) -->
+                        <div class="bg-[#121418] border border-[#2C3440] rounded-xl p-3.5 text-center">
+                            <div class="text-xs text-[#A0AAB5]">Left Motor (pwmA)</div>
+                            <div id="val-pwmA" class="text-2xl font-mono font-bold text-white my-1">0</div>
+                            <div id="dir-pwmA" class="text-xs font-bold text-[#A0AAB5] mb-2">■ STOP</div>
+                            <div class="w-full bg-[#262B34] h-2 rounded-full overflow-hidden">
+                                <div id="bar-pwmA" class="accent-bg h-full transition-all duration-300" style="width: 0%"></div>
+                            </div>
+                        </div>
+
+                        <!-- Right Motor (pwmB) -->
+                        <div class="bg-[#121418] border border-[#2C3440] rounded-xl p-3.5 text-center">
+                            <div class="text-xs text-[#A0AAB5]">Right Motor (pwmB)</div>
+                            <div id="val-pwmB" class="text-2xl font-mono font-bold text-white my-1">0</div>
+                            <div id="dir-pwmB" class="text-xs font-bold text-[#A0AAB5] mb-2">■ STOP</div>
+                            <div class="w-full bg-[#262B34] h-2 rounded-full overflow-hidden">
+                                <div id="bar-pwmB" class="accent-bg h-full transition-all duration-300" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Data Logging & CSV Export Kártya (Pontosan a TelemetryScreen.kt alapján) -->
+                <div class="bg-[#121418] border border-[#2C3440] rounded-2xl p-4 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span id="rec-dot" class="w-3 h-3 rounded-full bg-[#E53935] animate-pulse"></span>
+                            <span id="rec-status-text" class="text-xs font-bold tracking-wider text-[#E53935]">RECORDING ACTIVE</span>
+                        </div>
+                        <div class="flex items-center gap-4 text-xs font-mono">
+                            <span class="text-[#A0AAB5]">Minták: <strong id="rec-count" class="text-white">0</strong> rows</span>
+                            <span class="text-[#A0AAB5]">⏱ <strong id="rec-timer" class="text-white">00:00</strong></span>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap gap-2.5">
+                        <button
+                            type="button"
+                            id="btn-toggle-log"
+                            onclick="toggleCsvLogging()"
+                            class="flex-1 min-w-[140px] py-2 px-3 rounded-xl bg-[#D32F2F] hover:bg-[#B71C1C] text-white text-xs font-bold transition flex items-center justify-center gap-1.5"
+                        >
+                            <span id="btn-toggle-log-icon">■</span>
+                            <span id="btn-toggle-log-text">Stop Logging</span>
+                        </button>
+                        <button
+                            type="button"
+                            onclick="downloadAppCsv()"
+                            class="flex-1 min-w-[140px] py-2 px-3 rounded-xl bg-[#262B34] hover:bg-[#2C3440] border border-[#455A64] text-white text-xs font-bold transition flex items-center justify-center gap-1.5"
+                        >
+                            <span>⬇</span>
+                            <span>Export CSV (App formátum)</span>
+                        </button>
+                        <button
+                            type="button"
+                            onclick="switchTab('share')"
+                            class="flex-1 min-w-[140px] py-2 px-3 rounded-xl accent-bg text-xs font-bold transition flex items-center justify-center gap-1.5"
+                        >
+                            <span>📧</span>
+                            <span>Küldés Gmail-ben</span>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- JOBB PANEL (5 oszlop): MANUÁLIS VEZÉRLŐPAD (ControlScreen.kt stílusban + Kereszt D-Pad) -->
+            <section class="lg:col-span-5 bg-[#1B1E24] border border-[#2C3440] rounded-2xl p-5 md:p-6 shadow-xl flex flex-col justify-between space-y-5">
+                <div class="flex items-center justify-between border-b border-[#2C3440] pb-3">
+                    <div>
+                        <h2 class="text-lg font-bold text-white">Manuális Vezérlőpad</h2>
+                        <p class="text-xs text-[#A0AAB5]">Közvetlen irányítási parancsok (F, B, L, R, S)</p>
+                    </div>
+                    <span class="text-[11px] font-mono px-2.5 py-1 rounded-lg bg-[#262B34] text-[#FF9800] border border-[#2C3440]">
+                        POST /api/command
+                    </span>
+                </div>
+
+                <!-- Operational Mode Választó (ControlScreen.kt FilterChip stílusban) -->
+                <div class="bg-[#121418] border border-[#2C3440] rounded-xl p-3.5">
+                    <div class="text-xs text-[#A0AAB5] mb-2">Operational Mode</div>
+                    <div class="grid grid-cols-2 gap-2.5">
+                        <button
+                            type="button"
+                            id="chip-manual"
+                            onclick="setRobotMode('MANUAL')"
+                            class="py-2 px-3 rounded-lg text-xs font-bold accent-bg transition flex items-center justify-center gap-1.5"
+                        >
+                            <span>👆</span>
+                            <span>MANUAL RC</span>
+                        </button>
+                        <button
+                            type="button"
+                            id="chip-auto"
+                            onclick="setRobotMode('AUTO')"
+                            class="py-2 px-3 rounded-lg text-xs font-bold bg-[#262B34] text-[#A0AAB5] hover:text-white border border-[#2C3440] transition flex items-center justify-center gap-1.5"
+                        >
+                            <span>🥋</span>
+                            <span>AUTONOMOUS</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Speed Limiter Slider (ControlScreen.kt alapján) -->
+                <div class="bg-[#121418] border border-[#2C3440] rounded-xl p-3.5">
+                    <div class="flex items-center justify-between mb-1.5">
+                        <span class="text-xs font-semibold text-white">⚡ Speed Limiter</span>
+                        <span id="speed-limit-label" class="text-sm font-mono font-bold accent-text">100%</span>
+                    </div>
+                    <input
+                        id="speed-limit-slider"
+                        type="range"
+                        min="10"
+                        max="100"
+                        step="10"
+                        value="100"
+                        oninput="document.getElementById('speed-limit-label').textContent = this.value + '%'"
+                        class="w-full cursor-pointer"
+                    >
+                </div>
+
+                <!-- Hagyományos Kereszt / D-Pad Irányítópad (Előre, Hátra, Balra, Jobbra, Stop) -->
+                <div class="py-2 flex items-center justify-center">
+                    <div class="grid grid-cols-3 gap-3 w-full max-w-[270px] aspect-square">
+                        <div></div>
+                        <!-- ELŐRE (F) -->
+                        <button
+                            type="button"
+                            onclick="sendCommand('F')"
+                            class="flex flex-col items-center justify-center rounded-2xl bg-[#262B34] hover:bg-[#00E5FF] hover:text-black active:scale-95 border border-[#455A64] text-white font-bold shadow-lg transition duration-150"
+                        >
+                            <span class="text-2xl leading-none">▲</span>
+                            <span class="text-[11px] uppercase tracking-wider mt-1">Előre</span>
+                            <span class="text-[10px] font-mono opacity-75">[F]</span>
+                        </button>
+                        <div></div>
+
+                        <!-- BALRA (L) -->
+                        <button
+                            type="button"
+                            onclick="sendCommand('L')"
+                            class="flex flex-col items-center justify-center rounded-2xl bg-[#262B34] hover:bg-[#00E5FF] hover:text-black active:scale-95 border border-[#455A64] text-white font-bold shadow-lg transition duration-150"
+                        >
+                            <span class="text-2xl leading-none">◀</span>
+                            <span class="text-[11px] uppercase tracking-wider mt-1">Balra</span>
+                            <span class="text-[10px] font-mono opacity-75">[L]</span>
+                        </button>
+
+                        <!-- STOP (S) -->
+                        <button
+                            type="button"
+                            onclick="sendCommand('S')"
+                            class="flex flex-col items-center justify-center rounded-2xl bg-[#E53935] hover:bg-[#D32F2F] active:scale-95 border border-red-400 text-white font-extrabold shadow-lg transition duration-150"
+                        >
+                            <span class="text-xl leading-none">■</span>
+                            <span class="text-[11px] uppercase tracking-wider mt-1">Stop</span>
+                            <span class="text-[10px] font-mono opacity-85">[S]</span>
+                        </button>
+
+                        <!-- JOBBRA (R) -->
+                        <button
+                            type="button"
+                            onclick="sendCommand('R')"
+                            class="flex flex-col items-center justify-center rounded-2xl bg-[#262B34] hover:bg-[#00E5FF] hover:text-black active:scale-95 border border-[#455A64] text-white font-bold shadow-lg transition duration-150"
+                        >
+                            <span class="text-2xl leading-none">▶</span>
+                            <span class="text-[11px] uppercase tracking-wider mt-1">Jobbra</span>
+                            <span class="text-[10px] font-mono opacity-75">[R]</span>
+                        </button>
+
+                        <div></div>
+                        <!-- HÁTRA (B) -->
+                        <button
+                            type="button"
+                            onclick="sendCommand('B')"
+                            class="flex flex-col items-center justify-center rounded-2xl bg-[#262B34] hover:bg-[#00E5FF] hover:text-black active:scale-95 border border-[#455A64] text-white font-bold shadow-lg transition duration-150"
+                        >
+                            <span class="text-2xl leading-none">▼</span>
+                            <span class="text-[11px] uppercase tracking-wider mt-1">Hátra</span>
+                            <span class="text-[10px] font-mono opacity-75">[B]</span>
+                        </button>
+                        <div></div>
+                    </div>
+                </div>
+
+                <!-- Emergency Stop Button (ControlScreen.kt alapján) -->
+                <button
+                    type="button"
+                    onclick="sendCommand('S')"
+                    class="w-full py-2.5 rounded-xl bg-[#C62828] hover:bg-[#B71C1C] active:scale-[0.99] text-white font-bold text-xs tracking-wider uppercase shadow-md transition flex items-center justify-center gap-2"
+                >
+                    <span>🛑</span>
+                    <span>EMERGENCY STOP (PARANCS: S)</span>
+                </button>
+
+                <!-- Utolsó parancs státusz -->
+                <div class="bg-[#121418] border border-[#2C3440] rounded-xl p-3 flex items-center justify-between text-xs font-mono">
+                    <span class="text-[#A0AAB5]">Utolsó parancs:</span>
+                    <span id="last-cmd-status" class="accent-text font-bold">Alaphelyzet (STOP)</span>
+                </div>
+            </section>
+        </div>
+
+        <!-- =================================================================== -->
+        <!-- 2. FÜL: MEGOSZTÁS & GMAIL CSV EXPORT (TelemetryCsvLogger.kt alapján) -->
+        <!-- =================================================================== -->
+        <div id="tab-share" class="hidden space-y-6">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+                <!-- Bal: Gmail kikérés & Megosztási beállítások -->
+                <section class="lg:col-span-5 bg-[#1B1E24] border border-[#2C3440] rounded-2xl p-6 shadow-xl space-y-5">
+                    <div class="flex items-center justify-between border-b border-[#2C3440] pb-3">
+                        <div>
+                            <h2 class="text-lg font-bold text-white">Telemetria Kikérése Gmail-lel</h2>
+                            <p class="text-xs text-[#A0AAB5]">Mobilalkalmazással (TelemetryCsvLogger.kt) 100%-ban azonos CSV struktúra</p>
+                        </div>
+                        <span class="text-xs font-mono px-2.5 py-1 rounded bg-[#262B34] accent-text border border-[#2C3440]">
+                            RFC-4180 CSV
+                        </span>
+                    </div>
+
+                    <!-- Gmail űrlap -->
+                    <div class="space-y-4">
+                        <div>
+                            <label for="gmail-to" class="block text-xs font-semibold text-[#A0AAB5] mb-1">
+                                Címzett Gmail címe (ahová az adatokat kikéred):
+                            </label>
+                            <input
+                                id="gmail-to"
+                                type="email"
+                                placeholder="pelda@gmail.com"
+                                class="w-full px-3.5 py-2.5 rounded-xl bg-[#121418] border border-[#2C3440] text-sm text-white focus:outline-none focus:border-[#00E5FF]"
+                            >
+                        </div>
+
+                        <div>
+                            <label for="gmail-subject" class="block text-xs font-semibold text-[#A0AAB5] mb-1">
+                                Tárgy (App alapértelmezett):
+                            </label>
+                            <input
+                                id="gmail-subject"
+                                type="text"
+                                value="Mini Sumo Robot Telemetry Log"
+                                class="w-full px-3.5 py-2.5 rounded-xl bg-[#121418] border border-[#2C3440] text-sm text-white focus:outline-none focus:border-[#00E5FF]"
+                            >
+                        </div>
+
+                        <div>
+                            <label for="gmail-note" class="block text-xs font-semibold text-[#A0AAB5] mb-1">
+                                Megjegyzés a mérési jegyzőkönyvhöz:
+                            </label>
+                            <textarea
+                                id="gmail-note"
+                                rows="2"
+                                placeholder="Pl. Dohyo tesztfutás #1, 2S LiPo akkumulátor..."
+                                class="w-full px-3.5 py-2 rounded-xl bg-[#121418] border border-[#2C3440] text-sm text-white focus:outline-none focus:border-[#00E5FF]"
+                            ></textarea>
+                        </div>
+
+                        <!-- Gombok: Gmail Web Compose, Mailto, Natív Megosztás -->
+                        <div class="space-y-2.5 pt-1">
+                            <button
+                                type="button"
+                                onclick="sendViaGmail()"
+                                class="w-full py-3 px-4 rounded-xl bg-[#E53935] hover:bg-[#D32F2F] text-white font-bold text-sm shadow-lg transition flex items-center justify-center gap-2"
+                            >
+                                <span>📧</span>
+                                <span>Küldés Gmail-ben + CSV Fájl Letöltése</span>
+                            </button>
+
+                            <div class="grid grid-cols-2 gap-2.5">
+                                <button
+                                    type="button"
+                                    onclick="sendViaMailto()"
+                                    class="py-2.5 px-3 rounded-xl bg-[#262B34] hover:bg-[#2C3440] border border-[#455A64] text-xs font-bold text-white transition flex items-center justify-center gap-1.5"
+                                >
+                                    <span>✉️</span>
+                                    <span>Mailto Kliens</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onclick="shareNativeCsv()"
+                                    class="py-2.5 px-3 rounded-xl bg-[#262B34] hover:bg-[#2C3440] border border-[#455A64] text-xs font-bold text-white transition flex items-center justify-center gap-1.5"
+                                >
+                                    <span>📤</span>
+                                    <span>Natív Megosztás</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Közvetlen CSV Letöltési opciók -->
+                    <div class="bg-[#121418] border border-[#2C3440] rounded-xl p-4 space-y-3">
+                        <div class="text-xs font-bold text-white">Közvetlen CSV Fájl Műveletek</div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            <button
+                                type="button"
+                                onclick="downloadAppCsv()"
+                                class="py-2 px-3 rounded-lg accent-bg text-xs font-bold transition"
+                            >
+                                ⬇ Munkamenet CSV Letöltése
+                            </button>
+                            <a
+                                href="http://127.0.0.1:5000/api/export/csv"
+                                target="_blank"
+                                class="py-2 px-3 rounded-lg bg-[#262B34] hover:bg-[#2C3440] border border-[#455A64] text-white text-xs font-bold text-center transition"
+                            >
+                                🗄️ SQLite DB CSV Letöltése
+                            </a>
+                        </div>
+                        <button
+                            type="button"
+                            onclick="copyCsvToClipboard()"
+                            class="w-full py-2 px-3 rounded-lg bg-[#1B1E24] hover:bg-[#262B34] border border-[#2C3440] text-xs font-mono text-[#A0AAB5] hover:text-white transition"
+                        >
+                            📋 CSV tartalom másolása a vágólapra
+                        </button>
+                        <div id="share-feedback" class="text-[11px] font-mono accent-text min-h-[16px]"></div>
+                    </div>
+                </section>
+
+                <!-- Jobb: Élő CSV Előnézet (Pontosan az App 8 oszlopával) -->
+                <section class="lg:col-span-7 bg-[#1B1E24] border border-[#2C3440] rounded-2xl p-6 shadow-xl space-y-4">
+                    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-[#2C3440] pb-3">
+                        <div>
+                            <h2 class="text-lg font-bold text-white">Mobilalkalmazás CSV Előnézet</h2>
+                            <p id="csv-filename-preview" class="text-xs font-mono accent-text">sumo_telemetry_20261023_165000.csv</p>
+                        </div>
+                        <button
+                            type="button"
+                            onclick="clearCsvSession()"
+                            class="px-3 py-1.5 rounded-lg bg-[#262B34] hover:bg-[#E53935] text-xs font-semibold text-white transition"
+                        >
+                            🗑️ Munkamenet ürítése
+                        </button>
+                    </div>
+
+                    <!-- CSV Fejléc specifikáció -->
+                    <div class="bg-[#121418] border border-[#2C3440] rounded-xl p-3 font-mono text-[11px] text-[#00E5FF] overflow-x-auto">
+                        Timestamp_ms,DateTime,Dist_Left_cm,Dist_Right_cm,Line_Left,Line_Right,Battery_Volts,Battery_Percent
+                    </div>
+
+                    <!-- Táblázatos előnézet a legutóbbi sorokból -->
+                    <div class="overflow-x-auto border border-[#2C3440] rounded-xl max-h-64">
+                        <table class="w-full text-left font-mono text-xs">
+                            <thead class="bg-[#121418] text-[#A0AAB5] sticky top-0">
+                                <tr>
+                                    <th class="p-2.5">Timestamp_ms</th>
+                                    <th class="p-2.5">DateTime</th>
+                                    <th class="p-2.5">Dist_L</th>
+                                    <th class="p-2.5">Dist_R</th>
+                                    <th class="p-2.5">Line_L</th>
+                                    <th class="p-2.5">Line_R</th>
+                                    <th class="p-2.5">VBat</th>
+                                    <th class="p-2.5">Bat_%</th>
+                                </tr>
+                            </thead>
+                            <tbody id="csv-table-body" class="divide-y divide-[#2C3440] bg-[#16191E]">
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Nyers CSV szöveg -->
+                    <div>
+                        <div class="text-xs font-semibold text-[#A0AAB5] mb-1">Nyers RFC-4180 CSV kimenet (utolsó 15 sor):</div>
+                        <pre id="csv-raw-preview" class="bg-[#121418] border border-[#2C3440] rounded-xl p-3 font-mono text-[11px] text-[#E0E0E0] overflow-x-auto max-h-44"></pre>
+                    </div>
+                </section>
+            </div>
+        </div>
+
+        <!-- =================================================================== -->
+        <!-- 3. FÜL: DOHYO RADAR (DohyoScreen.kt alapján)                        -->
+        <!-- =================================================================== -->
+        <div id="tab-dohyo" class="hidden">
+            <section class="max-w-3xl mx-auto bg-[#1B1E24] border border-[#2C3440] rounded-2xl p-6 shadow-xl space-y-5">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-xl font-bold text-white"><span id="radar-robot-name">Mini Sumo</span> Arena Radar</h2>
+                        <p class="text-xs text-[#A0AAB5]">Standard 77 cm diameter with 2.5 cm white Tawara border</p>
+                    </div>
+                    <span id="radar-edge-badge" class="hidden px-3 py-1 rounded-lg bg-[#E53935] text-white text-xs font-bold">
+                        ⚠ EDGE DETECTED
+                    </span>
+                </div>
+
+                <div class="flex justify-center py-2">
+                    <canvas id="dohyo-canvas" width="380" height="380" class="max-w-full aspect-square"></canvas>
+                </div>
+
+                <!-- Live Sensors Legend Card -->
+                <div class="bg-[#121418] border border-[#2C3440] rounded-xl p-4 grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
+                    <div>
+                        <div class="text-[11px] text-[#A0AAB5]">Left Distance</div>
+                        <div id="radar-dist-l" class="text-sm font-bold text-white">35 cm</div>
+                    </div>
+                    <div>
+                        <div class="text-[11px] text-[#A0AAB5]">Right Distance</div>
+                        <div id="radar-dist-r" class="text-sm font-bold text-white">42 cm</div>
+                    </div>
+                    <div>
+                        <div class="text-[11px] text-[#A0AAB5]">Left Line</div>
+                        <div id="radar-line-l" class="text-sm font-bold text-[#43A047]">CLEAR</div>
+                    </div>
+                    <div>
+                        <div class="text-[11px] text-[#A0AAB5]">Right Line</div>
+                        <div id="radar-line-r" class="text-sm font-bold text-[#43A047]">CLEAR</div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- =================================================================== -->
+        <!-- 4. FÜL: BEÁLLÍTÁSOK (SettingsScreen.kt & AppSettings.kt alapján)    -->
+        <!-- =================================================================== -->
+        <div id="tab-settings" class="hidden">
+            <div class="max-w-3xl mx-auto space-y-6">
+                <!-- Robot Profile -->
+                <section class="bg-[#1B1E24] border border-[#2C3440] rounded-2xl p-6 space-y-4">
+                    <h2 class="text-base font-bold accent-text">Robot Profile</h2>
+                    <div class="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+                        <div>
+                            <div class="text-sm font-bold text-white">Robot Megjelenített Neve</div>
+                            <div class="text-xs text-[#A0AAB5]">Megjelenik a fejlécben, a Dohyo radaron és a Gmail jelentésben</div>
+                        </div>
+                        <div class="flex gap-2">
+                            <input
+                                id="input-robot-name"
+                                type="text"
+                                value="Mini Sumo"
+                                class="px-3 py-2 rounded-xl bg-[#121418] border border-[#2C3440] text-sm text-white"
+                            >
+                            <button
+                                type="button"
+                                onclick="saveRobotName()"
+                                class="px-4 py-2 rounded-xl accent-bg text-xs font-bold"
+                            >
+                                Mentés
+                            </button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Accent Color Swatches (AppSettings.kt 8 színe) -->
+                <section class="bg-[#1B1E24] border border-[#2C3440] rounded-2xl p-6 space-y-4">
+                    <div>
+                        <h2 class="text-base font-bold accent-text">Accent Color (AppSettings.kt)</h2>
+                        <p class="text-xs text-[#A0AAB5]">Válaszd ki a mobilalkalmazás hangsúlyos színét:</p>
+                    </div>
+                    <div id="accent-swatches" class="grid grid-cols-2 sm:grid-cols-4 gap-3"></div>
+                </section>
+
+                <!-- Mini Sumo System Specs (SettingsScreen.kt alapján) -->
+                <section class="bg-[#1B1E24] border border-[#2C3440] rounded-2xl p-6 space-y-2">
+                    <h2 class="text-sm font-bold text-white">ℹ️ Mini Sumo System Specs</h2>
+                    <ul class="text-xs text-[#A0AAB5] space-y-1 font-mono">
+                        <li>• Telemetry Endpoint: GET http://127.0.0.1:5000/api/telemetry (500 ms ticker)</li>
+                        <li>• Command Endpoint: POST http://127.0.0.1:5000/api/command (F, B, L, R, S)</li>
+                        <li>• CSV Export Endpoint: GET http://127.0.0.1:5000/api/export/csv</li>
+                        <li>• 2S LiPo Battery: 8.4V max, 7.4V nominal, 6.8V critical cutoff</li>
+                    </ul>
+                </section>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- ASZINKRON JAVASCRIPT LOGIKA -->
+    <script>
+        // Szigorúan a kért 127.0.0.1:5000 végpontok és 500 ms-os ciklusidő
+        const TELEMETRY_URL = 'http://127.0.0.1:5000/api/telemetry';
+        const COMMAND_URL = 'http://127.0.0.1:5000/api/command';
+        const POLL_INTERVAL_MS = 500;
+
+        // AppSettings.kt hangsúlyos színek
+        const ACCENT_COLORS = [
+            { name: 'Turquoise', hex: '#00E5FF', onHex: '#000000' },
+            { name: 'Electric Blue', hex: '#2979FF', onHex: '#FFFFFF' },
+            { name: 'Emerald Green', hex: '#00E676', onHex: '#000000' },
+            { name: 'Neon Orange', hex: '#FF9100', onHex: '#000000' },
+            { name: 'Crimson Red', hex: '#FF1744', onHex: '#FFFFFF' },
+            { name: 'Royal Purple', hex: '#D500F9', onHex: '#FFFFFF' },
+            { name: 'Sun Amber', hex: '#FFD600', onHex: '#000000' },
+            { name: 'Hot Pink', hex: '#FF4081', onHex: '#FFFFFF' }
+        ];
+
+        // CSV naplózó állapot (TelemetryCsvLogger.kt megfelelője)
+        let isLoggingCsv = true;
+        let sessionStartTimeMs = Date.now();
+        let csvRecords = [];
+        let latestTelemetry = {
+            mode: 'MANUAL',
+            state: 'STOP',
+            bat: 8.4,
+            s1: 35,
+            s2: 42,
+            s3: 0,
+            pwmA: 0,
+            pwmB: 0
+        };
+
+        /**
+         * Pontosan a mobilalkalmazás BatteryState.kt (calculatePercentage) függvénye
+         */
+        function calculateBatteryPercentage(v) {
+            const FULL_VOLTAGE = 8.4;
+            const NOMINAL_VOLTAGE = 7.4;
+            const MIN_VOLTAGE = 6.0;
+            if (v >= FULL_VOLTAGE) return 100;
+            if (v <= MIN_VOLTAGE) return 0;
+            if (v >= NOMINAL_VOLTAGE) {
+                const ratio = (v - NOMINAL_VOLTAGE) / (FULL_VOLTAGE - NOMINAL_VOLTAGE);
+                return Math.max(0, Math.min(100, Math.floor(50 + ratio * 50)));
+            } else {
+                const ratio = (v - MIN_VOLTAGE) / (NOMINAL_VOLTAGE - MIN_VOLTAGE);
+                return Math.max(0, Math.min(100, Math.floor(ratio * 50)));
+            }
+        }
+
+        /**
+         * Dátum formázás: "yyyy-MM-dd HH:mm:ss.SSS" (TelemetryCsvLogger.kt)
+         */
+        function formatCsvDateTime(dateObj) {
+            const pad = (n, w = 2) => String(n).padStart(w, '0');
+            return `${dateObj.getFullYear()}-${pad(dateObj.getMonth() + 1)}-${pad(dateObj.getDate())} ` +
+                   `${pad(dateObj.getHours())}:${pad(dateObj.getMinutes())}:${pad(dateObj.getSeconds())}.${pad(dateObj.getMilliseconds(), 3)}`;
+        }
+
+        /**
+         * Fájlnév időbélyeg: "sumo_telemetry_yyyyMMdd_HHmmss.csv" (TelemetryCsvLogger.kt)
+         */
+        function getCsvFileName() {
+            const d = new Date();
+            const pad = (n) => String(n).padStart(2, '0');
+            const ts = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+            return `sumo_telemetry_${ts}.csv`;
+        }
+
+        /**
+         * Egy telemetriai minta hozzáadása a CSV munkamenethez (TelemetryCsvLogger.kt logSample alapján)
+         */
+        function recordCsvSample(data) {
+            if (!isLoggingCsv) return;
+
+            const now = new Date();
+            const timestampMs = now.getTime();
+            const dateTimeStr = formatCsvDateTime(now);
+            const distL = Number(data.s1 ?? 0);
+            const distR = Number(data.s2 ?? 0);
+            const s3Val = Number(data.s3 ?? 0);
+            const lineLeft = (s3Val === 1 || s3Val === 3) ? 1 : 0;
+            const lineRight = (s3Val === 2 || s3Val === 3) ? 1 : 0;
+            const vBat = Number(data.bat ?? 0);
+            const batPct = calculateBatteryPercentage(vBat);
+
+            csvRecords.push({
+                timestampMs,
+                dateTimeStr,
+                distL,
+                distR,
+                lineLeft,
+                lineRight,
+                vBat: vBat.toFixed(2),
+                batPct
+            });
+
+            // Max 500 sor megtartása a böngésző memóriában
+            if (csvRecords.length > 500) {
+                csvRecords.shift();
+            }
+
+            updateLoggerUi();
+        }
+
+        /**
+         * Teljes RFC-4180 CSV szöveg összeállítása pontosan az App fejlécével
+         */
+        function buildCsvString() {
+            const header = 'Timestamp_ms,DateTime,Dist_Left_cm,Dist_Right_cm,Line_Left,Line_Right,Battery_Volts,Battery_Percent\r\n';
+            const rows = csvRecords.map(r =>
+                `${r.timestampMs},"${r.dateTimeStr}",${r.distL},${r.distR},${r.lineLeft},${r.lineRight},${r.vBat},${r.batPct}`
+            ).join('\r\n');
+            return header + rows + (rows ? '\r\n' : '');
+        }
+
+        /**
+         * Logger számláló, időzítő és CSV előnézet frissítése
+         */
+        function updateLoggerUi() {
+            const count = csvRecords.length;
+            document.getElementById('rec-count').textContent = count;
+            document.getElementById('nav-sample-badge').textContent = count;
+
+            if (isLoggingCsv) {
+                const elapsedSec = Math.floor((Date.now() - sessionStartTimeMs) / 1000);
+                const mins = String(Math.floor(elapsedSec / 60)).padStart(2, '0');
+                const secs = String(elapsedSec % 60).padStart(2, '0');
+                document.getElementById('rec-timer').textContent = `${mins}:${secs}`;
+            }
+
+            // Táblázat frissítése (utolsó 10 sor)
+            const tbody = document.getElementById('csv-table-body');
+            const recent = csvRecords.slice(-10).reverse();
+            tbody.innerHTML = recent.map(r => `
+                <tr class="hover:bg-[#262B34]/60">
+                    <td class="p-2 text-[#A0AAB5]">${r.timestampMs}</td>
+                    <td class="p-2 text-white">${r.dateTimeStr}</td>
+                    <td class="p-2">${r.distL}</td>
+                    <td class="p-2">${r.distR}</td>
+                    <td class="p-2">${r.lineLeft}</td>
+                    <td class="p-2">${r.lineRight}</td>
+                    <td class="p-2 font-bold text-[#43A047]">${r.vBat}</td>
+                    <td class="p-2 font-bold accent-text">${r.batPct}%</td>
+                </tr>
+            `).join('');
+
+            // Nyers előnézet
+            const header = 'Timestamp_ms,DateTime,Dist_Left_cm,Dist_Right_cm,Line_Left,Line_Right,Battery_Volts,Battery_Percent';
+            const rawLines = csvRecords.slice(-15).map(r =>
+                `${r.timestampMs},"${r.dateTimeStr}",${r.distL},${r.distR},${r.lineLeft},${r.lineRight},${r.vBat},${r.batPct}`
+            );
+            document.getElementById('csv-raw-preview').textContent = [header, ...rawLines].join('\n');
+            document.getElementById('csv-filename-preview').textContent = getCsvFileName();
+        }
+
+        /**
+         * DOM frissítése a szervertől érkező telemetriai JSON alapján
+         */
+        function updateTelemetryDom(data) {
+            latestTelemetry = data;
+
+            // Kapcsolat státusz
+            const connDot = document.getElementById('conn-dot');
+            const connText = document.getElementById('conn-text');
+            connDot.className = 'w-2 h-2 rounded-full bg-[#43A047]';
+            connText.textContent = 'Connected · HTTP Telemetry (500 ms)';
+
+            // Akkumulátor számítás (BatteryState.kt alapján: 6.8V kritikus)
+            const vBat = Number(data.bat ?? 0);
+            const pct = calculateBatteryPercentage(vBat);
+            const isCritical = vBat < 6.8;
+
+            document.getElementById('val-bat').textContent = vBat.toFixed(2);
+            document.getElementById('val-bat-pct').textContent = `${pct} %`;
+            document.getElementById('bar-bat').style.width = `${pct}%`;
+
+            // TopAppBar BatteryWidget frissítése
+            document.getElementById('top-bat-pct').textContent = `${pct}%`;
+            document.getElementById('top-bat-volt').textContent = `${vBat.toFixed(2)}V`;
+            document.getElementById('top-bat-fill').style.width = `${Math.max(5, pct)}%`;
+
+            const batColor = isCritical ? '#E53935' : (pct < 30 ? '#FFA000' : (pct < 60 ? '#FFD600' : '#43A047'));
+            document.getElementById('bar-bat').style.backgroundColor = batColor;
+            document.getElementById('top-bat-fill').style.backgroundColor = batColor;
+            document.getElementById('top-bat-warn').classList.toggle('hidden', !isCritical);
+
+            const batChip = document.getElementById('bat-status-chip');
+            if (isCritical) {
+                batChip.textContent = 'CRITICAL (<6.8V)';
+                batChip.className = 'text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-[#E53935]/20 text-[#E53935]';
+            } else {
+                batChip.textContent = 'NOMINAL';
+                batChip.className = 'text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-[#43A047]/20 text-[#43A047]';
+            }
+
+            // Állapot és Mód
+            const state = data.state || 'STOP';
+            const mode = data.mode || 'MANUAL';
+            document.getElementById('val-state').textContent = state;
+            document.getElementById('val-mode').textContent = mode;
+            document.getElementById('val-updated').textContent = new Date().toLocaleTimeString('hu-HU');
+
+            // Szenzorok: s1, s2, s3 (SensorBar.kt színkódolással)
+            const s1 = Number(data.s1 ?? 0);
+            const s2 = Number(data.s2 ?? 0);
+            const s3 = Number(data.s3 ?? 0);
+
+            document.getElementById('val-s1').textContent = s1;
+            document.getElementById('val-s2').textContent = s2;
+            document.getElementById('val-s3').textContent = s3;
+
+            updateDistanceSensorBar('s1', s1);
+            updateDistanceSensorBar('s2', s2);
+
+            const isEdge = s3 > 0;
+            document.getElementById('dot-s3').style.backgroundColor = isEdge ? '#E53935' : '#43A047';
+            document.getElementById('label-s3').textContent = isEdge ? 'BORDER (WHITE)' : 'CLEAR (BLACK)';
+            document.getElementById('label-s3').style.color = isEdge ? '#FF5252' : '#43A047';
+            document.getElementById('bar-s3').style.width = isEdge ? '100%' : '0%';
+            document.getElementById('bar-s3').style.backgroundColor = isEdge ? '#E53935' : '#43A047';
+
+            // Motor PWM jelek (pwmA, pwmB)
+            const pwmA = Number(data.pwmA ?? 0);
+            const pwmB = Number(data.pwmB ?? 0);
+            document.getElementById('val-pwmA').textContent = pwmA;
+            document.getElementById('val-pwmB').textContent = pwmB;
+            document.getElementById('bar-pwmA').style.width = `${Math.min(100, (pwmA / 255) * 100)}%`;
+            document.getElementById('bar-pwmB').style.width = `${Math.min(100, (pwmB / 255) * 100)}%`;
+
+            const isReverse = state === 'BACKWARD';
+            updateMotorDirection('dir-pwmA', pwmA, isReverse);
+            updateMotorDirection('dir-pwmB', pwmB, isReverse);
+
+            // CSV naplózás és Dohyo radar frissítése
+            recordCsvSample(data);
+            drawDohyoRadar(s1, s2, isEdge);
+        }
+
+        function updateDistanceSensorBar(idSuffix, distCm) {
+            const isNear = distCm >= 1 && distCm <= 15;
+            const isMed = distCm >= 16 && distCm <= 35;
+            const color = isNear ? '#E53935' : (isMed ? '#FFA000' : '#43A047');
+            const label = isNear ? 'THREAT (<15cm)' : (isMed ? 'TRACKING' : 'CLEAR');
+            const pct = Math.min(100, Math.max(5, (distCm / 80) * 100));
+
+            const bar = document.getElementById(`bar-${idSuffix}`);
+            const status = document.getElementById(`status-${idSuffix}`);
+            bar.style.width = `${pct}%`;
+            bar.style.backgroundColor = color;
+            status.textContent = label;
+            status.style.color = color;
+        }
+
+        function updateMotorDirection(elemId, pwm, isReverse) {
+            const el = document.getElementById(elemId);
+            if (pwm === 0) {
+                el.textContent = '■ STOP';
+                el.style.color = '#A0AAB5';
+            } else if (isReverse) {
+                el.textContent = '▼ REV';
+                el.style.color = '#FFA000';
+            } else {
+                el.textContent = '▲ FWD';
+                el.style.color = '#43A047';
+            }
+        }
+
+        /**
+         * Aszinkron GET lekérdezés 500 ms-onként a http://127.0.0.1:5000/api/telemetry végpontról
+         */
+        async function fetchTelemetry() {
+            try {
+                const response = await fetch(TELEMETRY_URL);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const data = await response.json();
+                updateTelemetryDom(data);
+            } catch (err) {
+                document.getElementById('conn-dot').className = 'w-2 h-2 rounded-full bg-[#E53935] animate-pulse';
+                document.getElementById('conn-text').textContent = 'Disconnected – Indítsd el a mock_server.py-t (127.0.0.1:5000)';
+            }
+        }
+
+        /**
+         * Aszinkron POST kérés gombnyomásra a http://127.0.0.1:5000/api/command végpontra
+         */
+        async function sendCommand(commandChar) {
+            const statusEl = document.getElementById('last-cmd-status');
+            try {
+                statusEl.textContent = `Küldés: ${commandChar}...`;
+                const response = await fetch(COMMAND_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ command: commandChar })
+                });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const result = await response.json();
+                if (result.robot_state) {
+                    statusEl.textContent = `${commandChar} → ${result.robot_state.state} (PWM: ${result.robot_state.pwmA}/${result.robot_state.pwmB})`;
+                    updateTelemetryDom(result.robot_state);
+                }
+            } catch (err) {
+                statusEl.textContent = `Hiba a(z) ${commandChar} parancs küldésekor!`;
+            }
+        }
+
+        /**
+         * Módváltás (MANUAL / AUTO)
+         */
+        async function setRobotMode(mode) {
+            const manualBtn = document.getElementById('chip-manual');
+            const autoBtn = document.getElementById('chip-auto');
+            if (mode === 'MANUAL') {
+                manualBtn.className = 'py-2 px-3 rounded-lg text-xs font-bold accent-bg transition flex items-center justify-center gap-1.5';
+                autoBtn.className = 'py-2 px-3 rounded-lg text-xs font-bold bg-[#262B34] text-[#A0AAB5] hover:text-white border border-[#2C3440] transition flex items-center justify-center gap-1.5';
+            } else {
+                autoBtn.className = 'py-2 px-3 rounded-lg text-xs font-bold bg-[#2979FF] text-white transition flex items-center justify-center gap-1.5';
+                manualBtn.className = 'py-2 px-3 rounded-lg text-xs font-bold bg-[#262B34] text-[#A0AAB5] hover:text-white border border-[#2C3440] transition flex items-center justify-center gap-1.5';
+            }
+            try {
+                await fetch(COMMAND_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ command: latestTelemetry.state === 'STOP' ? 'S' : 'F', mode })
+                });
+            } catch (_) {}
+        }
+
+        /**
+         * CSV Naplózás indítása / megállítása
+         */
+        function toggleCsvLogging() {
+            isLoggingCsv = !isLoggingCsv;
+            const dot = document.getElementById('rec-dot');
+            const text = document.getElementById('rec-status-text');
+            const btn = document.getElementById('btn-toggle-log');
+            const btnIcon = document.getElementById('btn-toggle-log-icon');
+            const btnText = document.getElementById('btn-toggle-log-text');
+
+            if (isLoggingCsv) {
+                sessionStartTimeMs = Date.now();
+                dot.className = 'w-3 h-3 rounded-full bg-[#E53935] animate-pulse';
+                text.textContent = 'RECORDING ACTIVE';
+                text.className = 'text-xs font-bold tracking-wider text-[#E53935]';
+                btn.className = 'flex-1 min-w-[140px] py-2 px-3 rounded-xl bg-[#D32F2F] hover:bg-[#B71C1C] text-white text-xs font-bold transition flex items-center justify-center gap-1.5';
+                btnIcon.textContent = '■';
+                btnText.textContent = 'Stop Logging';
+            } else {
+                dot.className = 'w-3 h-3 rounded-full bg-[#455A64]';
+                text.textContent = 'LOGGER IDLE';
+                text.className = 'text-xs font-bold tracking-wider text-[#A0AAB5]';
+                btn.className = 'flex-1 min-w-[140px] py-2 px-3 rounded-xl accent-bg text-xs font-bold transition flex items-center justify-center gap-1.5';
+                btnIcon.textContent = '▶';
+                btnText.textContent = 'Start Logging';
+            }
+        }
+
+        /**
+         * Mobilalkalmazás formátumú CSV fájl letöltése
+         */
+        function downloadAppCsv() {
+            const csvContent = buildCsvString();
+            const fileName = getCsvFileName();
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showShareFeedback(`✓ Letöltve: ${fileName} (${csvRecords.length} sor)`);
+            return fileName;
+        }
+
+        /**
+         * Adatok kikérése / küldése Gmail Web Compose segítségével + automatikus CSV letöltés
+         */
+        function sendViaGmail() {
+            const to = document.getElementById('gmail-to').value.trim();
+            const subject = document.getElementById('gmail-subject').value.trim() || 'Mini Sumo Robot Telemetry Log';
+            const note = document.getElementById('gmail-note').value.trim();
+            const robotName = document.getElementById('top-robot-name').textContent;
+
+            // Letöltjük a CSV fájlt is, hogy egyből csatolható legyen
+            const downloadedFile = downloadAppCsv();
+
+            // Összeállítjuk az e-mail törzsét a legutóbbi 25 CSV sorral és összefoglalóval
+            const header = 'Timestamp_ms,DateTime,Dist_Left_cm,Dist_Right_cm,Line_Left,Line_Right,Battery_Volts,Battery_Percent';
+            const sampleRows = csvRecords.slice(-25).map(r =>
+                `${r.timestampMs},"${r.dateTimeStr}",${r.distL},${r.distR},${r.lineLeft},${r.lineRight},${r.vBat},${r.batPct}`
+            ).join('\n');
+
+            const bodyLines = [
+                `Robot: ${robotName}`,
+                `Generálva: ${new Date().toLocaleString('hu-HU')}`,
+                `Rögzített minták száma: ${csvRecords.length} sor`,
+                `Aktuális akkumulátor: ${Number(latestTelemetry.bat).toFixed(2)} V (${calculateBatteryPercentage(Number(latestTelemetry.bat))}%)`,
+                `CSV fájlnév: ${downloadedFile}`,
+                note ? `\nMegjegyzés:\n${note}` : '',
+                `\n--- TELEMETRY CSV LOG (RFC-4180) ---`,
+                header,
+                sampleRows
+            ].filter(Boolean).join('\n');
+
+            const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1` +
+                `&to=${encodeURIComponent(to)}` +
+                `&su=${encodeURIComponent(subject)}` +
+                `&body=${encodeURIComponent(bodyLines)}`;
+
+            window.open(gmailUrl, '_blank', 'noopener');
+            showShareFeedback(`✓ Gmail megnyitva és ${downloadedFile} letöltve!`);
+        }
+
+        /**
+         * Alapértelmezett e-mail kliens (mailto:) megnyitása
+         */
+        function sendViaMailto() {
+            const to = document.getElementById('gmail-to').value.trim();
+            const subject = document.getElementById('gmail-subject').value.trim() || 'Mini Sumo Robot Telemetry Log';
+            const header = 'Timestamp_ms,DateTime,Dist_Left_cm,Dist_Right_cm,Line_Left,Line_Right,Battery_Volts,Battery_Percent';
+            const rows = csvRecords.slice(-20).map(r =>
+                `${r.timestampMs},"${r.dateTimeStr}",${r.distL},${r.distR},${r.lineLeft},${r.lineRight},${r.vBat},${r.batPct}`
+            ).join('\n');
+            const body = `${header}\n${rows}`;
+            window.location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+        }
+
+        /**
+         * Natív megosztás (Web Share API fájl csatolással, ha a böngésző támogatja)
+         */
+        async function shareNativeCsv() {
+            const csvContent = buildCsvString();
+            const fileName = getCsvFileName();
+            const file = new File([csvContent], fileName, { type: 'text/csv' });
+
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                try {
+                    await navigator.share({
+                        title: 'Mini Sumo Robot Telemetry Log',
+                        text: 'Mini Sumo Robot telemetriai CSV napló',
+                        files: [file]
+                    });
+                    showShareFeedback('✓ Sikeres natív megosztás!');
+                    return;
+                } catch (_) {}
+            }
+            downloadAppCsv();
+        }
+
+        async function copyCsvToClipboard() {
+            try {
+                await navigator.clipboard.writeText(buildCsvString());
+                showShareFeedback('✓ Teljes CSV a vágólapra másolva!');
+            } catch (_) {
+                showShareFeedback('⚠ Nem sikerült a vágólapra másolni.');
+            }
+        }
+
+        function clearCsvSession() {
+            csvRecords = [];
+            sessionStartTimeMs = Date.now();
+            updateLoggerUi();
+            showShareFeedback('✓ Munkamenet napló ürítve.');
+        }
+
+        function showShareFeedback(msg) {
+            const el = document.getElementById('share-feedback');
+            el.textContent = msg;
+        }
+
+        /**
+         * Dohyo Radar Canvas kirajzolása (Pontosan a DohyoScreen.kt alapján)
+         */
+        function drawDohyoRadar(distL, distR, isEdge) {
+            const canvas = document.getElementById('dohyo-canvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width;
+            const h = canvas.height;
+            const cx = w / 2;
+            const cy = h / 2;
+
+            ctx.clearRect(0, 0, w, h);
+
+            const diameterPx = Math.min(w, h) * 0.9;
+            const pxPerCm = diameterPx / 77.0;
+            const outerRadius = 38.5 * pxPerCm;
+            const whiteBorder = 2.5 * pxPerCm;
+            const blackRadius = outerRadius - whiteBorder;
+
+            // 1. Fehér Tawara szegély
+            ctx.beginPath();
+            ctx.arc(cx, cy, outerRadius, 0, Math.PI * 2);
+            ctx.fillStyle = '#E0E0E0';
+            ctx.fill();
+
+            // 2. Fekete küzdőtér (72 cm)
+            ctx.beginPath();
+            ctx.arc(cx, cy, blackRadius, 0, Math.PI * 2);
+            ctx.fillStyle = '#181818';
+            ctx.fill();
+
+            // 3. Shikiri-sen kezdővonalak középen
+            const lineHalfLen = 5.0 * pxPerCm;
+            const lineOffset = 5.0 * pxPerCm;
+            ctx.strokeStyle = '#755B49';
+            ctx.lineWidth = 1.2 * pxPerCm;
+            ctx.beginPath();
+            ctx.moveTo(cx - lineOffset, cy - lineHalfLen);
+            ctx.lineTo(cx - lineOffset, cy + lineHalfLen);
+            ctx.moveTo(cx + lineOffset, cy - lineHalfLen);
+            ctx.lineTo(cx + lineOffset, cy + lineHalfLen);
+            ctx.stroke();
+
+            // 4. Szenzor kúpok (Bal: -108°, Jobb: -72°)
+            drawSensorCone(ctx, cx, cy, -108, distL, pxPerCm);
+            drawSensorCone(ctx, cx, cy, -72, distR, pxPerCm);
+
+            // 5. Mini Sumo Robot alváz (10x10 cm)
+            const halfRobot = 5.0 * pxPerCm;
+            ctx.fillStyle = '#263238';
+            ctx.fillRect(cx - halfRobot, cy - halfRobot, halfRobot * 2, halfRobot * 2);
+
+            // Első penge (Scoop)
+            ctx.fillStyle = '#B0BEC5';
+            ctx.fillRect(cx - halfRobot, cy - halfRobot, halfRobot * 2, 4);
+
+            // Irányjelző nyíl
+            ctx.fillStyle = '#4CAF50';
+            ctx.beginPath();
+            ctx.moveTo(cx, cy - halfRobot + 6);
+            ctx.lineTo(cx - 7, cy - halfRobot + 18);
+            ctx.lineTo(cx + 7, cy - halfRobot + 18);
+            ctx.closePath();
+            ctx.fill();
+
+            // Vonalérzékelő pontok
+            ctx.fillStyle = isEdge ? '#FF1744' : '#37474F';
+            ctx.beginPath();
+            ctx.arc(cx - halfRobot + 5, cy - halfRobot + 5, 5, 0, Math.PI * 2);
+            ctx.arc(cx + halfRobot - 5, cy - halfRobot + 5, 5, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Radar feliratok frissítése
+            document.getElementById('radar-dist-l').textContent = `${distL} cm`;
+            document.getElementById('radar-dist-r').textContent = `${distR} cm`;
+            document.getElementById('radar-line-l').textContent = isEdge ? 'WHITE EDGE' : 'CLEAR';
+            document.getElementById('radar-line-l').style.color = isEdge ? '#E53935' : '#43A047';
+            document.getElementById('radar-line-r').textContent = isEdge ? 'WHITE EDGE' : 'CLEAR';
+            document.getElementById('radar-line-r').style.color = isEdge ? '#E53935' : '#43A047';
+            document.getElementById('radar-edge-badge').classList.toggle('hidden', !isEdge);
+        }
+
+        function drawSensorCone(ctx, cx, cy, angleDeg, distCm, pxPerCm) {
+            if (distCm <= 0) return;
+            const clamped = Math.max(4, Math.min(65, distCm)) * pxPerCm;
+            const rad = (angleDeg * Math.PI) / 180;
+            const leftRad = ((angleDeg - 12) * Math.PI) / 180;
+            const rightRad = ((angleDeg + 12) * Math.PI) / 180;
+            const isAlert = distCm <= 20;
+
+            ctx.beginPath();
+            ctx.moveTo(cx, cy);
+            ctx.lineTo(cx + clamped * Math.cos(leftRad), cy + clamped * Math.sin(leftRad));
+            ctx.lineTo(cx + clamped * Math.cos(rightRad), cy + clamped * Math.sin(rightRad));
+            ctx.closePath();
+            ctx.fillStyle = isAlert ? 'rgba(255, 61, 0, 0.42)' : 'rgba(0, 229, 255, 0.25)';
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(cx + clamped * Math.cos(rad), cy + clamped * Math.sin(rad), 4, 0, Math.PI * 2);
+            ctx.fillStyle = isAlert ? '#FF3D00' : '#00E5FF';
+            ctx.fill();
+        }
+
+        /**
+         * Fülváltás (Dashboard / Megosztás / Dohyo / Beállítások)
+         */
+        function switchTab(tabId) {
+            ['dashboard', 'share', 'dohyo', 'settings'].forEach(id => {
+                document.getElementById(`tab-${id}`).classList.toggle('hidden', id !== tabId);
+                const btn = document.getElementById(`tab-btn-${id}`);
+                if (id === tabId) {
+                    btn.className = 'tab-btn flex items-center gap-2 px-4 py-2.5 text-xs md:text-sm font-bold border-b-2 accent-border accent-text transition whitespace-nowrap';
+                } else {
+                    btn.className = 'tab-btn flex items-center gap-2 px-4 py-2.5 text-xs md:text-sm font-semibold border-b-2 border-transparent text-[#A0AAB5] hover:text-white transition whitespace-nowrap';
+                }
+            });
+        }
+
+        /**
+         * Beállítások: Robot név és AppSettings.kt színválasztó
+         */
+        function saveRobotName() {
+            const name = document.getElementById('input-robot-name').value.trim() || 'Mini Sumo';
+            document.getElementById('top-robot-name').textContent = name;
+            document.getElementById('radar-robot-name').textContent = name;
+        }
+
+        function setAccentColor(hex, onHex) {
+            document.documentElement.style.setProperty('--accent', hex);
+            document.documentElement.style.setProperty('--on-accent', onHex);
+            renderAccentSwatches(hex);
+        }
+
+        function renderAccentSwatches(activeHex = '#00E5FF') {
+            const container = document.getElementById('accent-swatches');
+            container.innerHTML = ACCENT_COLORS.map(c => `
+                <button
+                    type="button"
+                    onclick="setAccentColor('${c.hex}', '${c.onHex}')"
+                    class="flex items-center gap-2.5 p-2.5 rounded-xl bg-[#121418] border ${c.hex === activeHex ? 'border-white' : 'border-[#2C3440]'} hover:border-white transition text-left"
+                >
+                    <span class="w-5 h-5 rounded-full shrink-0 flex items-center justify-center text-[10px] font-bold" style="background:${c.hex}; color:${c.onHex}">
+                        ${c.hex === activeHex ? '✓' : ''}
+                    </span>
+                    <span class="text-xs font-medium text-white truncate">${c.name}</span>
+                </button>
+            `).join('');
+        }
+
+        // Inicializálás
+        renderAccentSwatches();
+        drawDohyoRadar(35, 42, false);
+        fetchTelemetry();
+        setInterval(fetchTelemetry, POLL_INTERVAL_MS);
+    </script>
+</body>
+</html>
